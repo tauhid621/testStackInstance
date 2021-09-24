@@ -1,0 +1,51 @@
+name: "deploy"
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy: 
+    runs-on: ubuntu-latest
+    name: "Deploy nextjs app to AWS S3"
+    
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          persist-credentials: false
+
+      - name: Check file existence
+        id: check_files
+        uses: andstor/file-existence-action@v1
+        with:
+          files: "package.json"
+      
+      - name: use node.js v14
+        uses: actions/setup-node@v1
+        with:
+          node-version: '14'
+          check-latest: true
+          registry-url: https://registry.npmjs.org/
+      
+      - name: npm install, build, and test
+        if: steps.check_files.outputs.files_exists == 'true'
+        run: |
+          npm install
+          npm run build 
+          npm run test
+
+      - name: Configure AWS credentials from your account
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+                  
+      - name: Uploading files to s3
+        run: aws s3 sync ./out s3://${{ secrets.AWS_S3_BUCKET_NAME }}/ 
+
+      - name: setting index and error files
+        run: aws s3 website s3://${{ secrets.AWS_S3_BUCKET_NAME }}/ --index-document index.html --error-document 404.html
+
+      - name: Post Deploy message
+        run: |
+          echo "Deployment of this repository is sucesful. You can access the URL from Readme.md"
